@@ -15,8 +15,8 @@ import AttachSheet from '../../src/components/AttachSheet';
 import { ADD_ONS, chatBlockReason } from '../../src/data/addons';
 import {
   appendMessage, attachDocument, channelById, ChannelMessage, consultationAllowance,
-  effectiveComms, isChatOnly, messagesLeft, minutesLeft, ScheduledCall, STATUS_CHIP,
-  validityLabel,
+  callLabel, effectiveComms, isChatOnly, messagesLeft, minutesLeft, orderedCalls,
+  ScheduledCall, STATUS_CHIP, validityLabel,
 } from '../../src/data/channels';
 import { colors, radius, typography } from '../../src/theme/theme';
 
@@ -80,6 +80,22 @@ export default function ChannelScreen() {
   // rather than presenting a capability that was never bought.
   // Bounded by this channel's own providers, not the product as a whole.
   const caps = effectiveComms(channel);
+  /**
+   * The next call still ahead of the patient, named rather than left to be
+   * worked out from the list. Same rule as the booking's own Actions card, so
+   * the two surfaces can never disagree about which call is next.
+   */
+  const calls = orderedCalls(channel.calls);
+  const nextCallIdx = calls.findIndex(
+    (c) => c.status === 'in_progress' || c.status === 'scheduled' || c.status === 'accepted',
+  );
+  const nextCall = nextCallIdx >= 0 ? calls[nextCallIdx] : null;
+  const nextCallLive = !!nextCall && (nextCall.status === 'in_progress' || nextCall.joinable);
+  /**
+   * Whether this is a numbered series at all. `callLabel` earns the number the
+   * same way for both screens; the pill only makes sense alongside one.
+   */
+  const numbered = calls.length > 1 && callLabel(calls, 0) !== calls[0]?.title;
   const allowance = consultationAllowance(channel);
   const chatOnly = channel.counterparts.every(isChatOnly);
   const callsOn = caps.audio || caps.video;
@@ -374,11 +390,53 @@ export default function ChannelScreen() {
         {/* ── Scheduled calls ──────────────────────────────────────── */}
         {tab === 'calls' ? (
           <ScrollView contentContainerStyle={styles.panelContent}>
-            {channel.calls.length ? channel.calls.map((c) => (
+            {/* Which call is next, before the list of all of them. */}
+            {calls.length ? (
+              nextCall ? (
+                <View style={styles.nextUp}>
+                  <View style={[styles.nextUpIcon, !nextCallLive && styles.nextUpIconIdle]}>
+                    <Ionicons
+                      name={nextCall.mode === 'video' ? 'videocam' : 'call'}
+                      size={15}
+                      color={colors.white}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.nextUpLabel}>NEXT SCHEDULED CALL FOR YOU</Text>
+                    <Text style={styles.nextUpTitle}>
+                      {callLabel(calls, nextCallIdx)}
+                    </Text>
+                    <Text style={styles.nextUpSub}>
+                      {nextCallLive
+                        ? `Live now · ${nextCall.durationMin} min — join below`
+                        : `${nextCall.scheduledStart} · ${nextCall.durationMin} min · ${
+                          nextCall.mode === 'video' ? 'video' : 'voice'} call`}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={[styles.nextUp, styles.nextUpEmpty]}>
+                  <Ionicons name="checkmark-done-outline" size={16} color={colors.textMuted} />
+                  <Text style={styles.nextUpNone}>
+                    Every call here is done. Your care team will propose another
+                    if one is needed.
+                  </Text>
+                </View>
+              )
+            ) : null}
+
+            {calls.length ? calls.map((c, i) => (
               <Card key={c.id} style={styles.callCard}>
                 <View style={styles.callTop}>
                   <View style={{ flex: 1 }}>
-                    <Text style={typography.h3}>{c.title}</Text>
+                    <View style={styles.callTitleRow}>
+                      <Text style={[typography.h3, { flexShrink: 1 }]}>{c.title}</Text>
+                      {numbered && i === nextCallIdx ? (
+                        <View style={styles.nextPill}>
+                          <Text style={styles.nextPillText}>NEXT</Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <View style={styles.callMeta}>
                       <Ionicons
                         name={c.mode === 'video' ? 'videocam-outline' : 'call-outline'}
@@ -611,6 +669,27 @@ const styles = StyleSheet.create({
   panelContent: { paddingBottom: 20, gap: 10 },
   callCard: { gap: 12 },
   callTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  callTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  nextPill: {
+    paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
+  nextPillText: { fontSize: 9, fontWeight: '800', color: colors.white, letterSpacing: 0.5 },
+  nextUp: {
+    flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11,
+    borderRadius: radius.sm, backgroundColor: '#E8F1FC',
+    borderWidth: 1, borderColor: colors.primaryLight,
+  },
+  nextUpEmpty: { backgroundColor: colors.background, borderColor: colors.border },
+  nextUpIcon: {
+    width: 32, height: 32, borderRadius: 16, alignItems: 'center',
+    justifyContent: 'center', backgroundColor: colors.primary,
+  },
+  nextUpIconIdle: { backgroundColor: colors.primaryLight },
+  nextUpLabel: { fontSize: 9.5, fontWeight: '800', color: colors.primary, letterSpacing: 0.6 },
+  nextUpTitle: { fontSize: 14, fontWeight: '800', color: colors.textPrimary, marginTop: 2 },
+  nextUpSub: { fontSize: 11.5, color: colors.textSecondary, marginTop: 1 },
+  nextUpNone: { flex: 1, fontSize: 11.5, lineHeight: 17, color: colors.textMuted },
   callActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   joinBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

@@ -11,8 +11,8 @@ import PrimaryButton from '../src/components/PrimaryButton';
 import { inr, PRODUCT_LABEL, ProductKind } from '../src/data/checkout';
 import {
   appendMessage, attachDocument, channelForProduct, effectiveComms, isTeamProduct,
-  messagesLeft, SECOND_OPINION_COMMS, SECOND_OPINION_WINDOW_DAYS, secondOpinionChannel,
-  serviceChannels,
+  callLabel, messagesLeft, orderedCalls, SECOND_OPINION_COMMS,
+  SECOND_OPINION_WINDOW_DAYS, secondOpinionChannel, serviceChannels,
 } from '../src/data/channels';
 import { careDocsFor, prescriptionsFor } from '../src/data/careDocs';
 import AllowancePanel from '../src/components/AllowancePanel';
@@ -68,7 +68,7 @@ export default function BookingDetailScreen() {
     amount?: string; paid?: string; records?: string; attachments?: string;
     installments?: string; installmentsPaid?: string; channelId?: string; slotMinutes?: string;
     awaiting?: string;
-    bookedBy?: string; symptoms?: string; ref?: string;
+    bookedBy?: string; symptoms?: string; ref?: string; completedOn?: string;
   }>();
 
   const kind = (p.kind ?? 'appointment') as ProductKind;
@@ -116,7 +116,10 @@ export default function BookingDetailScreen() {
    * messages) is bought rather than refused.
    */
   const daysSinceCompletion = (() => {
-    const then = Date.parse(p.date ?? '');
+    // The finish date if the list knew one. `date` is a display string — for a
+    // plan it reads "Paid ₹x of ₹y" — so parsing it gave zero days and every
+    // finished plan looked like it had a full free window left.
+    const then = Date.parse(p.completedOn || p.date || '');
     if (Number.isNaN(then)) return 0;
     return Math.max(0, Math.round((Date.parse('2026-08-18') - then) / 86_400_000));
   })();
@@ -206,10 +209,29 @@ export default function BookingDetailScreen() {
   const joinActive = !!liveCall || !!purchasedCall;
 
   /** A plan's scheduled calls, in order; the first live-or-upcoming is next. */
-  const planCalls = kind !== 'appointment' && channel ? channel.calls : [];
+  const planCalls = kind !== 'appointment' && channel ? orderedCalls(channel.calls) : [];
   const nextPlanIdx = planCalls.findIndex(
     (c) => c.status === 'in_progress' || c.status === 'scheduled' || c.status === 'accepted',
   );
+  /**
+   * The one call the patient is actually waiting for.
+   *
+   * A plan books several calls, so a bare list makes the patient read every
+   * row and work out which one is still ahead of them. Naming it — "Intro
+   * call 2, Tuesday" — answers the question the card is opened to answer.
+   */
+  const nextPlanCall = nextPlanIdx >= 0 ? planCalls[nextPlanIdx] : null;
+  /**
+   * Whether the plan's schedule is still meaningful.
+   *
+   * A completed or cancelled booking reached through a bought add-on call has
+   * no next call — announcing one would promise care the plan no longer
+   * covers.
+   */
+  const showSchedule = planCalls.length > 0
+    && (isLive || effectiveStatus === 'pending');
+  const nextPlanLive = !!nextPlanCall
+    && (nextPlanCall.status === 'in_progress' || nextPlanCall.joinable);
   const join = JOIN_LABEL[consultType] ?? JOIN_LABEL.video;
 
   return (
@@ -523,7 +545,51 @@ export default function BookingDetailScreen() {
         && (planCalls.length || purchasedCall) ? (
           <Card style={styles.planCalls}>
             <Text style={styles.planCallsHead}>SCHEDULED CALLS</Text>
-            {planCalls.map((c, i) => {
+
+            {/* ── Next scheduled call for you ─────────────────────────
+                Said once, at the top, before the list repeats it. A plan
+                runs several calls over weeks, so "when am I next seen, and
+                which call is it?" is the thing worth answering plainly —
+                the list below is for checking the rest of the schedule. */}
+            {showSchedule ? (
+              nextPlanCall ? (
+                <View style={styles.nextUp}>
+                  <View style={[styles.nextUpIcon, !nextPlanLive && styles.nextUpIconIdle]}>
+                    <Ionicons
+                      name={nextPlanCall.mode === 'video' ? 'videocam' : 'call'}
+                      size={15}
+                      color={colors.white}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.nextUpLabel}>NEXT SCHEDULED CALL FOR YOU</Text>
+                    <Text style={styles.nextUpTitle}>
+                      {callLabel(planCalls, nextPlanIdx)}
+                    </Text>
+                    <Text style={styles.nextUpSub}>
+                      {nextPlanLive
+                        ? `Live now · ${nextPlanCall.durationMin} min — join below`
+                        : `${nextPlanCall.scheduledStart} · ${nextPlanCall.durationMin} min · ${
+                          nextPlanCall.mode === 'video' ? 'video' : 'voice'} call`}
+                    </Text>
+                  </View>
+                  {nextPlanLive ? <View style={styles.nextUpDot} /> : null}
+                </View>
+              ) : (
+                /* Every call in the plan is behind them. That's not an error
+                   — the team proposes the next one when it's due, and this
+                   says so rather than leaving a silent gap. */
+                <View style={[styles.nextUp, styles.nextUpEmpty]}>
+                  <Ionicons name="checkmark-done-outline" size={16} color={colors.textMuted} />
+                  <Text style={styles.nextUpNone}>
+                    Every call in this plan is done. Your care team will propose
+                    another here if one is needed.
+                  </Text>
+                </View>
+              )
+            ) : null}
+
+            {(showSchedule ? planCalls : []).map((c, i) => {
               const done = c.status === 'completed' || c.status === 'cancelled';
               const isNext = i === nextPlanIdx;
               const live = c.status === 'in_progress' || c.joinable;
@@ -535,9 +601,20 @@ export default function BookingDetailScreen() {
                     color={done ? colors.success : isNext ? colors.primary : colors.textMuted}
                   />
                   <View style={{ flex: 1 }}>
-                    <Text style={[typography.body, done && styles.planCallDoneText]}>
-                      Intro call {i + 1}{c.title ? ` · ${c.title}` : ''}
-                    </Text>
+                    <View style={styles.planCallTitleRow}>
+                      <Text
+                        style={[typography.body, done && styles.planCallDoneText, { flexShrink: 1 }]}
+                      >
+                        {callLabel(planCalls, i)}
+                      </Text>
+                      {/* Ties the row back to the banner above, so the two
+                          can't be read as two different calls. */}
+                      {isNext ? (
+                        <View style={styles.nextPill}>
+                          <Text style={styles.nextPillText}>NEXT</Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <Text style={typography.caption}>
                       {c.scheduledStart} · {c.durationMin} min
                       {isNext && !live ? ' · joining opens at this time' : ''}
@@ -1187,6 +1264,30 @@ const styles = StyleSheet.create({
   planCalls: { gap: 12, marginBottom: 12 },
   planCallsHead: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.6 },
   planCallRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  planCallTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  nextPill: {
+    paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
+  nextPillText: { fontSize: 9, fontWeight: '800', color: colors.white, letterSpacing: 0.5 },
+
+  nextUp: {
+    flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11,
+    borderRadius: radius.sm, backgroundColor: '#E8F1FC',
+    borderWidth: 1, borderColor: colors.primaryLight,
+  },
+  nextUpEmpty: { backgroundColor: colors.background, borderColor: colors.border },
+  nextUpIcon: {
+    width: 32, height: 32, borderRadius: 16, alignItems: 'center',
+    justifyContent: 'center', backgroundColor: colors.primary,
+  },
+  nextUpIconIdle: { backgroundColor: colors.primaryLight },
+  nextUpLabel: { fontSize: 9.5, fontWeight: '800', color: colors.primary, letterSpacing: 0.6 },
+  nextUpTitle: { fontSize: 14, fontWeight: '800', color: colors.textPrimary, marginTop: 2 },
+  nextUpSub: { fontSize: 11.5, color: colors.textSecondary, marginTop: 1 },
+  nextUpNone: { flex: 1, fontSize: 11.5, lineHeight: 17, color: colors.textMuted },
+  // styles.liveDot is white — correct on the blue join button, invisible here.
+  nextUpDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.success },
   planCallDone: { opacity: 0.75 },
   planCallDoneText: { textDecorationLine: 'line-through', color: colors.textSecondary },
   planJoinRow: { flexDirection: 'row', gap: 7, marginTop: 8 },

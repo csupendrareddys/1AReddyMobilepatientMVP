@@ -14,13 +14,13 @@ import { shelves } from '../../src/data/recommendations';
 import { favouriteRefs } from '../../src/data/favourites';
 import { caregivers } from '../../src/data/caregivers';
 import { favouriteProviders } from '../../src/data/providers';
-import { bookingsForView, viewBreakdown } from '../../src/data/bookingViews';
+import { bookingsForView, viewBreakdown, viewCount } from '../../src/data/bookingViews';
 import Card from '../../src/components/Card';
 import AppDrawer from '../../src/components/AppDrawer';
 import {
-  appointments, currentPatient, membership, notifications,
-  familyScopes, minors, planBookings, productCategories, recoveryPlanOrders,
-  secondOpinionBookings, supportStaff, wallet,
+  appointments, currentPatient, documents, membership, notifications,
+  familyScopes, minors, planBookings, prescriptions, productCategories,
+  recoveryPlanOrders, secondOpinionBookings, supportStaff, wallet,
 } from '../../src/data/mock';
 import { grantedModules } from '../../src/data/people';
 import { inr } from '../../src/data/checkout';
@@ -67,11 +67,19 @@ export default function DashboardScreen() {
   }[] = [
     { icon: 'calendar-outline', label: 'Upcoming', sub: 'Scheduled bookings', count: upcoming.length, tint: colors.primary, route: '/(tabs)/appointments?view=upcoming' },
     { icon: 'hourglass-outline', label: 'In Progress', sub: 'Care underway', count: inProgress, tint: colors.warning, route: '/(tabs)/appointments?view=in_progress' },
+    // Finished, but the free window hasn't closed — the patient can still ask
+    // the doctor something and it costs nothing. That's worth a tile of its
+    // own; left inside Completed it goes unnoticed until it has expired.
+    // Counted from the bookings list itself, so the tile and the head agree.
+    { icon: 'chatbubble-ellipses-outline', label: 'Free Follow-up', sub: 'Ask at no cost', tag: 'Window still open', count: viewCount('free_followup'), tint: colors.secondaryDark, route: '/(tabs)/appointments?view=free_followup' },
     { icon: 'checkmark-done-outline', label: 'Completed', sub: 'Past bookings', count: completed, tint: colors.success, route: '/(tabs)/appointments?view=completed' },
     // The head says what it is; the tag says who gives it and how you reach
     // them, because "second opinion" alone doesn't tell you it's a real
     // conversation with your own doctor.
     { icon: 'medical-outline', label: 'Second Opinion', sub: 'By your family doctor', tag: 'Video · Chat · Audio', count: secondOpinions, tint: colors.secondary, route: '/more/family-doctor' },
+    // Everything the doctors have written down. Routes to Records, which is
+    // already the hub holding both lists, rather than picking one of them.
+    { icon: 'documents-outline', label: 'Prescriptions & Documents', sub: 'Scripts, reports & files', count: prescriptions.length + documents.length, tint: colors.warningDark, route: '/(tabs)/records' },
   ];
 
   return (
@@ -195,7 +203,7 @@ export default function DashboardScreen() {
           >
             <View style={styles.tileTop}>
               <View style={[styles.tileIcon, { backgroundColor: `${t.tint}1A` }]}>
-                <Ionicons name={t.icon} size={19} color={t.tint} />
+                <Ionicons name={t.icon} size={16} color={t.tint} />
               </View>
               {t.count > 0 ? (
                 <View style={[styles.tileBadge, { backgroundColor: t.tint }]}>
@@ -448,24 +456,24 @@ const styles = StyleSheet.create({
   discoverText: { fontSize: 12.5, fontWeight: '700', color: colors.primary },
   subHead: { marginBottom: 8 },
   // One tile design shared by "Book appointments" and "Track your care".
-  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 18 },
+  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   // Icon and chevron sit on their own row so the label gets the tile's full
   // width — at 393pt a side-by-side layout truncated every long category name.
   tile: {
-    width: '47%', padding: 12, borderRadius: radius.md,
+    width: '47%', padding: 10, borderRadius: radius.md,
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
   },
-  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },
-  tileIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  tileLabel: { fontSize: 13, fontWeight: '700', color: colors.textPrimary },
-  tileSub: { fontSize: 10.5, color: colors.textMuted, marginTop: 2 },
+  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  tileIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  tileLabel: { fontSize: 12.5, fontWeight: '700', color: colors.textPrimary, lineHeight: 16 },
+  tileSub: { fontSize: 10, color: colors.textMuted, marginTop: 1, lineHeight: 13 },
   tileTag: {
-    alignSelf: 'flex-start', marginTop: 6,
-    paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill,
+    alignSelf: 'flex-start', marginTop: 5,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.pill,
   },
-  tileTagText: { fontSize: 9.5, fontWeight: '800' },
-  tileBadge: { minWidth: 19, height: 19, borderRadius: 10, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
-  tileBadgeText: { fontSize: 10.5, fontWeight: '800', color: colors.white },
+  tileTagText: { fontSize: 9, fontWeight: '800' },
+  tileBadge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
+  tileBadgeText: { fontSize: 10, fontWeight: '800', color: colors.white },
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   actionTile: { width: '47%', alignItems: 'flex-start', backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 10 },
   actionIconWrap: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#E8F1FC', alignItems: 'center', justifyContent: 'center' },

@@ -463,6 +463,45 @@ export const appointments: Appointment[] = [
     chief_complaint: 'Sleep trouble for three weeks',
   },
   {
+    id: 'a19',
+    doctor_id: 'd2',
+    doctor_name: 'Dr. Karthik Menon',
+    specialization: 'Cardiologist',
+    appointment_date: '2026-08-15',
+    start_time: '10:00',
+    appointment_type: 'video',
+    status: 'completed',
+    category: 'online',
+    duration_min: 15,
+    chief_complaint: 'Palpitations after starting new medication',
+  },
+  {
+    id: 'a20',
+    doctor_id: 'd3',
+    doctor_name: 'Dr. Priya Sharma',
+    specialization: 'Dermatologist',
+    appointment_date: '2026-08-11',
+    start_time: '16:30',
+    appointment_type: 'video',
+    status: 'completed',
+    category: 'instant',
+    duration_min: 10,
+    chief_complaint: 'Rash review after two weeks of treatment',
+  },
+  {
+    id: 'a21',
+    doctor_id: 'd4',
+    doctor_name: 'Dr. Suresh Iyer',
+    specialization: 'Orthopaedic Surgeon',
+    appointment_date: '2026-08-08',
+    start_time: '11:15',
+    appointment_type: 'in_person',
+    status: 'completed',
+    category: 'physical',
+    duration_min: 30,
+    chief_complaint: 'Post-cast review of wrist fracture',
+  },
+  {
     id: 'a18',
     doctor_id: 'd10',
     doctor_name: 'Dr. Fatima Sheikh',
@@ -536,6 +575,45 @@ export const prescriptions: PrescriptionItem[] = [
     lab_tests: ['Absolute Eosinophil Count'],
     advice: 'Avoid fragranced soaps. Apply moisturiser twice daily.',
     follow_up: '2026-06-26',
+  },
+  /* Older than three months. A prescription history that only reaches back a
+     few weeks isn't one — the reason a patient opens this screen is usually to
+     find something from a while ago. */
+  {
+    id: 'p3',
+    doctor_name: 'Dr. Karthik Menon',
+    date: '2026-03-04',
+    diagnosis: 'Essential hypertension — newly diagnosed',
+    medicines: [
+      { name: 'Telmisartan 40mg', dosage: '1 tablet, every morning', duration: '90 days', instructions: 'Before food' },
+    ],
+    lab_tests: ['Lipid Profile', 'Serum Electrolytes', 'ECG'],
+    advice: 'Reduce added salt. Check blood pressure twice weekly and log it.',
+    follow_up: '2026-06-04',
+  },
+  {
+    id: 'p4',
+    doctor_name: 'Dr. Suresh Iyer',
+    date: '2025-11-19',
+    diagnosis: 'Lumbar spondylosis with mechanical low back pain',
+    medicines: [
+      { name: 'Aceclofenac 100mg', dosage: '1 tablet, twice daily', duration: '7 days', instructions: 'After food' },
+      { name: 'Methylcobalamin 1500mcg', dosage: '1 tablet, daily', duration: '30 days' },
+    ],
+    lab_tests: ['X-ray Lumbosacral Spine'],
+    advice: 'Core strengthening under a physiotherapist. Avoid lifting from the waist.',
+  },
+  {
+    id: 'p5',
+    doctor_name: 'Dr. Anitha Rao',
+    date: '2025-08-02',
+    diagnosis: 'Iron deficiency anaemia',
+    medicines: [
+      { name: 'Ferrous Ascorbate 100mg', dosage: '1 tablet, daily', duration: '60 days', instructions: 'On an empty stomach' },
+    ],
+    lab_tests: ['Complete Blood Count', 'Serum Ferritin'],
+    advice: 'Take with citrus, not with tea or milk — both block absorption.',
+    follow_up: '2025-10-02',
   },
 ];
 
@@ -1321,6 +1399,11 @@ export const documents: PatientDocument[] = [
   { id: 'doc1', name: 'Lipid_Profile_Jul2026.pdf', category: 'Lab Report', uploaded_date: '2026-07-28', size: '842 KB' },
   { id: 'doc2', name: 'Aadhar_Card.pdf', category: 'Identity', uploaded_date: '2026-05-02', size: '1.1 MB' },
   { id: 'doc3', name: 'Insurance_Policy.pdf', category: 'Insurance', uploaded_date: '2026-04-11', size: '2.4 MB' },
+  { id: 'doc4', name: 'Discharge_Summary_Aug2026.pdf', category: 'Hospital Record', uploaded_date: '2026-08-06', size: '1.6 MB' },
+  { id: 'doc5', name: 'Chest_Xray.jpg', category: 'Imaging', uploaded_date: '2026-07-02', size: '3.2 MB' },
+  { id: 'doc6', name: 'ECG_Report_Mar2026.pdf', category: 'Lab Report', uploaded_date: '2026-03-04', size: '512 KB' },
+  { id: 'doc7', name: 'MRI_Lumbar_Spine.pdf', category: 'Imaging', uploaded_date: '2025-11-19', size: '8.7 MB' },
+  { id: 'doc8', name: 'Vaccination_Certificate.pdf', category: 'Immunisation', uploaded_date: '2025-06-14', size: '318 KB' },
 ];
 
 export type SpendingItem = {
@@ -1470,6 +1553,8 @@ export type PlanInstallment = {
 export type PlanBooking = {
   id: string;
   plan_name: string;
+  /** When it actually finished. Only set once the plan is over. */
+  completed_on?: string;
   status: 'pending_payment' | 'pending_acceptance' | 'confirmed' | 'active'
     | 'completed' | 'cancelled' | 'rejected';
   team_name: string;
@@ -1501,6 +1586,7 @@ export const planBookings: PlanBooking[] = [
     id: 'pb2',
     category: 'advanced',
     plan_name: 'Post-Kidney Surgery Recovery Plan – 30 Days',
+    completed_on: '2026-06-20',
     status: 'completed',
     team_name: 'Team Nephron',
     amount_paid: 18999,
@@ -2219,6 +2305,8 @@ export type PlanOrder = {
   id: string;
   plan_name: string;
   ordered_on: string;
+  /** When it actually finished. Only set once the plan is over. */
+  completed_on?: string;
   amount: number;
   status: 'pending' | 'confirmed' | 'in_process' | 'completed' | 'cancelled' | 'rejected';
   category: string;
@@ -2226,13 +2314,14 @@ export type PlanOrder = {
 
 export const recoveryPlanOrders: PlanOrder[] = [
   { id: 'ro1', plan_name: 'Viral Fever Recovery Plan – 7 Days', ordered_on: '2026-08-14', amount: 1299, status: 'in_process', category: 'recovery' },
-  { id: 'ro2', plan_name: 'Typhoid Recovery Plan – 14 Days', ordered_on: '2026-05-02', amount: 2999, status: 'completed', category: 'recovery' },
+  { id: 'ro2', plan_name: 'Typhoid Recovery Plan – 14 Days', ordered_on: '2026-05-02', completed_on: '2026-05-16', amount: 2999, status: 'completed', category: 'recovery' },
   { id: 'ro3', plan_name: 'Post-Dengue Strength Plan – 21 Days', ordered_on: '2026-08-09', amount: 3499, status: 'in_process', category: 'recovery' },
   { id: 'ro4', plan_name: 'Diabetes Reversal Plan – 90 Days', ordered_on: '2026-07-28', amount: 8999, status: 'in_process', category: 'recovery' },
   { id: 'ro5', plan_name: 'Chikungunya Recovery Plan – 14 Days', ordered_on: '2026-06-11', amount: 2799, status: 'cancelled', category: 'recovery' },
   { id: 'ro6', plan_name: 'Malaria Recovery Plan – 10 Days', ordered_on: '2026-08-16', amount: 2499, status: 'pending', category: 'recovery' },
   { id: 'ro7', plan_name: 'Post-COVID Recovery Plan – 21 Days', ordered_on: '2026-08-15', amount: 3299, status: 'confirmed', category: 'recovery' },
   { id: 'ro8', plan_name: 'Fracture Rehabilitation – 45 Days', ordered_on: '2026-08-13', amount: 5999, status: 'rejected', category: 'recovery' },
+  { id: 'ro9', plan_name: 'Post-Viral Fatigue Plan – 14 Days', ordered_on: '2026-07-29', completed_on: '2026-08-12', amount: 2699, status: 'completed', category: 'recovery' },
 ];
 
 export type ChatMessage = {

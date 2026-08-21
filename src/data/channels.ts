@@ -858,6 +858,133 @@ const productKey = (name: string) =>
  */
 const generated = new Map<string, ServiceChannel>();
 
+/** Today, as the sample data reckons it. */
+const TODAY = '2026-08-18';
+
+/**
+ * The kinds that are genuinely delivered over several sessions.
+ *
+ * `service` is deliberately absent: it covers 12-week programmes *and* one-off
+ * items — a lab report review, a home sample collection, an add-on call bought
+ * from the allowance panel. Giving those a two-call schedule would promise a
+ * course of care against a ₹199 prescription refill.
+ */
+const MULTI_SESSION: ProductKind[] = ['recovery_plan', 'group_offering', 'advanced_plan'];
+
+/** A `2026-08-22 · 10:30` stamp, as opposed to `now` or `at your slot time`. */
+const DATED = /^\d{4}-\d{2}-\d{2}/;
+
+/**
+ * A plan's calls in the order they actually happen.
+ *
+ * The sample threads list the upcoming call first, which reads fine as a feed
+ * but numbers the calls backwards: "Intro call 1" lands on the *latest* one
+ * and "Intro call 2" on a call that already finished. Numbering has to follow
+ * the calendar, or the patient is told their first intro call is still ahead
+ * of a second one they've already taken.
+ *
+ * Calls with no date — an emergency call "within 30 minutes", a consult "at
+ * your slot time" — can't be sorted against dated ones, so they keep their
+ * position at the front. An emergency is bought precisely because it's the
+ * next thing to happen, and dropping the whole sort because one call is
+ * undated would silently restore the backwards numbering.
+ */
+export function orderedCalls(calls: ScheduledCall[]): ScheduledCall[] {
+  if (calls.length < 2) return calls;
+  const undated = calls.filter((c) => !DATED.test(c.scheduledStart));
+  const dated = calls.filter((c) => DATED.test(c.scheduledStart))
+    .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart));
+  return [...undated, ...dated];
+}
+
+/**
+ * What to call one row in a call list.
+ *
+ * "Intro call 2" only means something inside a numbered series, so the number
+ * is earned rather than assumed: a plan's scheduled calls get one, and
+ * anything else keeps its own name. Without this a one-off consultation is
+ * announced as the first of a course the patient never bought, and an
+ * emergency call bought at 2am is labelled "Intro call 1".
+ *
+ * Both the booking screen and the conversation screen label through here, so
+ * the same call can't be named two different things in two places.
+ */
+export function callLabel(calls: ScheduledCall[], index: number): string {
+  const c = calls[index];
+  if (!c) return '';
+  if (!DATED.test(c.scheduledStart)) return c.title;
+  const dated = calls.filter((x) => DATED.test(x.scheduledStart));
+  if (dated.length < 2) return c.title;
+  return `Intro call ${dated.indexOf(c) + 1}${c.title ? ` · ${c.title}` : ''}`;
+}
+
+/** `2026-08-18` + 4 → `2026-08-22 · 10:30`, matching the hand-written calls. */
+function callStamp(dayOffset: number, time: string): string {
+  const d = new Date(`${TODAY}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dayOffset);
+  return `${d.toISOString().slice(0, 10)} · ${time}`;
+}
+
+/**
+ * The intro calls for a plan the project hasn't hand-written a thread for.
+ *
+ * A plan is *delivered* through its scheduled calls, so a plan channel with an
+ * empty call list tells the patient their plan includes none — the same wrong
+ * signal the fallback channel above exists to prevent. One call behind and one
+ * ahead is how the hand-written plans read, and it gives the "next scheduled
+ * call for you" line something true to point at.
+ *
+ * Deterministic in the product key: the same plan must not show a different
+ * schedule each time it's opened.
+ */
+function introCalls(
+  key: string,
+  mode: 'audio' | 'video',
+  /**
+   * Whether the plan is actually running. A plan that hasn't started has no
+   * calls behind it — showing a "completed" onboarding call on a booking the
+   * provider hasn't even accepted invents care that never happened.
+   */
+  started: boolean,
+): ScheduledCall[] {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i += 1) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const spread = Math.abs(h);
+  const ahead = 2 + (spread % 5);            // 2–6 days out
+  const behind = -(4 + ((spread >> 3) % 6)); // 4–9 days back
+  const hour = 9 + ((spread >> 6) % 9);      // 09:00–17:30
+  const half = (spread >> 11) % 2 ? '30' : '00';
+  const at = `${String(hour).padStart(2, '0')}:${half}`;
+
+  return [
+    {
+      id: `auto-call-${key}-1`,
+      title: 'Onboarding call',
+      mode: 'audio',
+      // Behind them once the plan is running, ahead of them before it starts.
+      scheduledStart: started ? callStamp(behind, '11:00') : callStamp(1, '11:00'),
+      durationMin: 20,
+      status: started ? 'completed' : 'scheduled',
+      joinable: false,
+      proposedBy: 'provider',
+    },
+    {
+      id: `auto-call-${key}-2`,
+      title: 'Progress review',
+      mode,
+      scheduledStart: callStamp(ahead, at),
+      durationMin: 30,
+      status: 'scheduled',
+      // A plan's call opens at its time, not because the plan is running.
+      joinable: false,
+      proposedBy: 'provider',
+    },
+  ];
+}
+
 export function channelForProduct(
   kind: ProductKind,
   name: string,
@@ -933,7 +1060,9 @@ export function channelForProduct(
       status: inProgress ? 'in_progress' : 'scheduled',
       joinable: inProgress,
       proposedBy: 'provider',
-    }] : [],
+    }] : (MULTI_SESSION.includes(kind)
+      ? introCalls(key || kind, comms.video ? 'video' : 'audio', inProgress)
+      : []),
     documents: [],
   };
 

@@ -10,6 +10,11 @@ import { minors, PrescriptionItem } from '../../src/data/mock';
 import { usePatientScope } from '../../src/scope/PatientScope';
 import { recordFor } from '../../src/data/minorData';
 import PersonSelector from '../../src/components/PersonSelector';
+import DateFilterBar from '../../src/components/DateFilterBar';
+import EmptyState from '../../src/components/EmptyState';
+import {
+  applyDateFilter, DatePeriod, DateRange, emptyRange, periodCounts,
+} from '../../src/data/dateFilter';
 import { peopleFor, SELF_ID } from '../../src/data/people';
 import { colors, radius, typography } from '../../src/theme/theme';
 
@@ -22,10 +27,16 @@ export default function PrescriptionsScreen() {
     const m = minors.find((x) => x.id === id);
     if (m) enter({ kind: 'minor', id: m.id, name: m.full_name.split(' ')[0], roleName: null });
   };
-  const prescriptions = recordFor(scope.kind, scope.id).prescriptions;
+  const all = recordFor(scope.kind, scope.id).prescriptions;
 
   const [mode, setMode] = useState<ViewMode>('table');
   const [detail, setDetail] = useState<PrescriptionItem | null>(null);
+  const [period, setPeriod] = useState<DatePeriod>('all');
+  const [range, setRange] = useState<DateRange>(emptyRange());
+
+  const dateOf = (p: PrescriptionItem) => p.date;
+  const counts = periodCounts(all, dateOf, range);
+  const prescriptions = applyDateFilter(all, dateOf, period, range);
 
   return (
     <ScreenWrapper contentStyle={{ paddingTop: 0 }}>
@@ -35,7 +46,21 @@ export default function PrescriptionsScreen() {
         Tap any prescription to see the full details.
       </Text>
 
-      {mode === 'table' ? (
+      <DateFilterBar
+        period={period}
+        onPeriod={setPeriod}
+        range={range}
+        onRange={setRange}
+        counts={counts}
+      />
+
+      {!prescriptions.length ? (
+        <EmptyState
+          icon="document-text-outline"
+          title="Nothing in this period"
+          subtitle="Try another head above, or widen the date range."
+        />
+      ) : mode === 'table' ? (
         <Card style={styles.tableCard}>
           <View style={styles.thead}>
             <Text style={[styles.th, styles.colDoctor]}>Doctor</Text>

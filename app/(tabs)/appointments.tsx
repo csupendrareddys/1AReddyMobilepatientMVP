@@ -25,7 +25,9 @@ const STATUS_ICON: Record<ViewKey, keyof typeof Ionicons.glyphMap> = {
   pending: 'time-outline',
   upcoming: 'calendar-outline',
   in_progress: 'hourglass-outline',
+  free_followup: 'chatbubble-ellipses-outline',
   completed: 'checkmark-done-outline',
+  second_opinion: 'medical-outline',
   cancelled: 'close-circle-outline',
 };
 
@@ -33,7 +35,9 @@ const STATUS_TINT: Record<ViewKey, string> = {
   pending: colors.warningDark,
   upcoming: colors.primary,
   in_progress: colors.warning,
+  free_followup: colors.secondary,
   completed: colors.success,
+  second_opinion: colors.secondary,
   cancelled: colors.textMuted,
 };
 
@@ -73,9 +77,12 @@ export default function MyBookingsScreen() {
   const rows = activeCat === ALL ? all : all.filter((r) => r.categoryKey === activeCat);
 
   /** One place builds the detail route, however the booking was reached. */
-  const openDetail = (r: UnifiedBooking) => router.push({
-    pathname: '/booking-detail',
-    params: {
+  const openDetail = (r: UnifiedBooking) => (
+    r.kindLabel === 'Second Opinion'
+      ? router.push('/more/family-doctor' as never)
+      : router.push({
+        pathname: '/booking-detail',
+        params: {
       kind: kindOf(r.kindLabel),
       name: r.title,
       provider: r.subtitle,
@@ -86,6 +93,7 @@ export default function MyBookingsScreen() {
           : view === 'upcoming' ? 'confirmed'
             : view === 'in_progress' ? 'in_progress'
               : view === 'cancelled' ? 'cancelled' : 'completed',
+      completedOn: r.completedOn ?? '',
       awaiting: r.awaiting ?? '',
       bookedBy: r.raisedBy ?? (r.ownerKind === 'self' ? '' : 'You, on their behalf'),
       amount: String(r.paidAmount ?? 0),
@@ -93,9 +101,10 @@ export default function MyBookingsScreen() {
       records: String(r.recordsShared),
       consultType: r.kindLabel === 'Consultation' ? 'video' : '',
       slotMinutes: r.slotMinutes ? String(r.slotMinutes) : '',
-      ref: r.id.toUpperCase(),
-    },
-  } as never);
+          ref: r.id.toUpperCase(),
+        },
+      } as never)
+  );
 
   /**
    * A card tapped on the dashboard lands here with `detail=<id>`: the list

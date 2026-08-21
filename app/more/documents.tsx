@@ -11,6 +11,11 @@ import AttachSheet from '../../src/components/AttachSheet';
 import { documents, minors, PatientDocument } from '../../src/data/mock';
 import { usePatientScope } from '../../src/scope/PatientScope';
 import PersonSelector from '../../src/components/PersonSelector';
+import DateFilterBar from '../../src/components/DateFilterBar';
+import EmptyState from '../../src/components/EmptyState';
+import {
+  applyDateFilter, DatePeriod, DateRange, emptyRange, periodCounts,
+} from '../../src/data/dateFilter';
 import { peopleFor, SELF_ID } from '../../src/data/people';
 import { colors, radius, typography } from '../../src/theme/theme';
 
@@ -37,6 +42,13 @@ export default function DocumentsScreen() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [added, setAdded] = useState<PatientDocument[]>([]);
   const [detail, setDetail] = useState<PatientDocument | null>(null);
+  const [period, setPeriod] = useState<DatePeriod>('all');
+  const [range, setRange] = useState<DateRange>(emptyRange());
+
+  const dateOf = (d: PatientDocument) => d.uploaded_date;
+  const all = [...added, ...documents];
+  const counts = periodCounts(all, dateOf, range);
+  const shown = applyDateFilter(all, dateOf, period, range);
 
   return (
     <ScreenWrapper contentStyle={{ paddingTop: 0 }}>
@@ -75,14 +87,28 @@ export default function DocumentsScreen() {
         }}
       />
 
-      {mode === 'table' ? (
+      <DateFilterBar
+        period={period}
+        onPeriod={setPeriod}
+        range={range}
+        onRange={setRange}
+        counts={counts}
+      />
+
+      {!shown.length ? (
+        <EmptyState
+          icon="folder-open-outline"
+          title="Nothing in this period"
+          subtitle="Try another head above, or widen the date range."
+        />
+      ) : mode === 'table' ? (
         <Card style={styles.tableCard}>
           <View style={styles.thead}>
             <Text style={[styles.th, styles.colName]}>Name</Text>
             <Text style={[styles.th, styles.colCat]}>Category</Text>
             <Text style={[styles.th, styles.colSize]}>Size</Text>
           </View>
-          {[...added, ...documents].map((d) => (
+          {shown.map((d) => (
             <TouchableOpacity key={d.id} style={styles.tr} onPress={() => setDetail(d)} activeOpacity={0.7}>
               <View style={[styles.colName, styles.nameCell]}>
                 <Ionicons name={iconFor(d.name)} size={16} color={colors.warningDark} />
@@ -99,7 +125,7 @@ export default function DocumentsScreen() {
         </Card>
       ) : (
         <View style={styles.grid}>
-          {[...added, ...documents].map((d) => (
+          {shown.map((d) => (
             <TouchableOpacity key={d.id} style={styles.gridCard} onPress={() => setDetail(d)} activeOpacity={0.85}>
               <View style={styles.thumb}>
                 <Ionicons name={iconFor(d.name)} size={28} color={colors.warningDark} />
